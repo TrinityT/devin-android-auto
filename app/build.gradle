@@ -34,4 +34,7 @@ dependencies {
     
     // Android Auto Car App Library
     implementation 'androidx.car.app:app:1.4.0'
+    
+    // OkHttp for HTTP requests
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }
