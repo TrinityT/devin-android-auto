@@ -25,6 +25,11 @@ captures/
 # Local configuration
 local.properties
 
+# Signing (never commit keystore or its passwords)
+keystore.properties
+*.jks
+*.keystore
+
 # OS generated files
 .DS_Store
 .DS_Store?
