@@ -1,78 +1,102 @@
-# Android Auto Hello World
+# ずんだもん天気予報
 
-A simple Android Auto Hello World application demonstrating the basic setup for an Android Auto car app.
+Android Auto対応の音声アシスタントアプリ。ずんだもんが現在地の天気予報を読み上げます。
 
-## Project Structure
+## 機能
 
-- `MainActivity.java` - Main Android activity for the phone app
-- `HelloCarAppService.java` - Car App Service that handles Android Auto integration
-- `HelloCarAppSession.java` - Session handler for the car app
-- `HelloScreen.java` - Main screen displayed in Android Auto
+- **現在地天気予報**: GPS位置情報に基づいて現在の天気を自動読み上げ
+- **ずんだもん音声**: VOICEVOX APIを使用したずんだもんの音声合成
+- **リアルタイム天気**: OpenWeatherMap APIで最新の天気情報を取得
+- **あいさつ機能**: ずんだもん風のあいさつを再生
 
-## Requirements
+## プロジェクト構成
 
-- Android Studio Hedgehog (2023.1.1) or later
+- `MainActivity.java` - スマホ用メインアクティビティ
+- `HelloCarAppService.java` - Android Auto連携用Car App Service
+- `HelloCarAppSession.java` - カーアプリのセッションハンドラー
+- `HelloScreen.java` - Android Auto画面のメインスクリーン
+
+## 動作環境
+
+- Android Studio Hedgehog (2023.1.1) 以降
 - Android SDK API Level 34
-- Minimum SDK: API Level 23
-- Target SDK: API Level 34
+- 最小SDK: API Level 23
+- ターゲットSDK: API Level 34
+- 位置情報パーミッションが必要
 
-## Setup Instructions
+## セットアップ手順
 
-1. **Open the Project**
-   - Open Android Studio
-   - Select "Open an Existing Project"
-   - Navigate to the `AndroidAutoHelloWorld` directory
+1. **プロジェクトを開く**
+   - Android Studioを起動
+   - 「Open an Existing Project」を選択
+   - プロジェクトディレクトリに移動
 
-2. **Sync Gradle**
-   - Android Studio will automatically prompt to sync Gradle
-   - Click "Sync Now" or wait for automatic sync
+2. **Gradle同期**
+   - Android Studioが自動的にGradle同期を促します
+   - 「Sync Now」をクリック
 
-3. **Build the Project**
-   - Click Build > Make Project
-   - Or press Ctrl+F9 (Windows) or Cmd+F9 (Mac)
+3. **プロジェクトのビルド**
+   - Build > Make Project
+   - または Ctrl+F9 (Windows) / Cmd+F9 (Mac)
 
-4. **Run on Device**
-   - Connect an Android device with Android 6.0 (API 23) or higher
-   - Enable USB Debugging on the device
-   - Click Run > Run 'app'
-   - Or press Shift+F10 (Windows) or Ctrl+R (Mac)
+4. **デバイスで実行**
+   - Android 6.0 (API 23) 以上のデバイスを接続
+   - USBデバッグを有効化
+   - Run > Run 'app'
+   - または Shift+F10 (Windows) / Ctrl+R (Mac)
 
-## Testing Android Auto
+## Android Autoのテスト
 
-To test the Android Auto functionality:
+### Desktop Head Unit (DHU)
+1. [Android Auto Developer Site](https://developers.google.com/android/auto/desktop-head-unit)からDHUをダウンロード
+2. セットアップ手順に従ってスマホをDHUに接続
+3. アプリがAndroid Autoランチャーに表示されます
 
-1. **Desktop Head Unit (DHU)**
-   - Download the Desktop Head Unit from [Android Auto Developer Site](https://developers.google.com/android/auto/desktop-head-unit)
-   - Follow the setup instructions to connect your phone to DHU
-   - The app will appear in the Android Auto launcher
+### 実際の車載ディスプレイ
+1. Android Auto対応の車にスマホを接続
+2. アプリが車載ディスプレイに表示されます
 
-2. **On a Real Car Display**
-   - Connect your phone to a car with Android Auto support
-   - The app should appear in the car's display
-
-## Key Components
+## 主要コンポーネント
 
 ### Car App Service
-The `HelloCarAppService` extends `CarAppService` and is the entry point for the Android Auto app. It creates a session when the app is launched.
+`HelloCarAppService`は`CarAppService`を継承し、Android Autoアプリのエントリーポイントです。アプリ起動時にセッションを作成します。
 
 ### Session
-The `HelloCarAppSession` manages the app session and creates screens for the car display.
+`HelloCarAppSession`はアプリセッションを管理し、カーディスプレイ用のスクリーンを作成します。
 
 ### Screen
-The `HelloScreen` displays a simple "Hello World!" message using the `MessageTemplate` with a button.
+`HelloScreen`は以下の機能を提供します：
+- GPS位置情報の取得（FusedLocationProviderClient）
+- OpenWeatherMap APIによる天気取得
+- VOICEVOX APIによる音声合成
+- ListTemplateによるメニュー表示
 
-## Dependencies
+## 依存関係
 
-- `androidx.car.app:app:1.4.0` - Core Android Auto library
-- `androidx.car.app:app-projected:1.4.0` - Projected mode for phone screens
+- `androidx.car.app:app:1.4.0` - Android Autoコアライブラリ
+- `com.squareup.okhttp3:okhttp:4.12.0` - HTTP通信
+- `com.google.android.gms:play-services-location:21.1.0` - 位置情報サービス
 
-## Customization
+## APIキー
 
-To customize the app:
-- Modify `HelloScreen.java` to change the displayed content
-- Update `activity_main.xml` for the phone UI
-- Add more screens to the session for navigation
+OpenWeatherMap APIキーがコードに設定されています。本番環境では環境変数や設定ファイルでの管理を推奨します。
 
-## License
+## カスタマイズ
 
-This is a sample project for educational purposes.
+アプリをカスタマイズするには：
+- `HelloScreen.java`を変更して表示内容を変更
+- `ic_launcher_foreground.xml`を変更してアイコンをカスタマイズ
+- `strings.xml`でアプリ名を変更
+- 位置情報や天気APIのエンドポイントを調整
+
+## TechTalk向けデモポイント
+
+- Android AutoのCar App Library使用
+- GPS位置情報取得とAPI連携
+- VOICEVOXによる音声合成
+- 非同期処理とエラーハンドリング
+- 車載環境でのUX設計
+
+## ライセンス
+
+このプロジェクトは教育目的のサンプルプロジェクトです。
