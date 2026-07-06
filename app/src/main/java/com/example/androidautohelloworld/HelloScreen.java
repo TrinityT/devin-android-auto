@@ -9,17 +9,23 @@ import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
 import androidx.car.app.Screen;
 import androidx.car.app.model.Action;
+import androidx.car.app.model.CarIcon;
 import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.Template;
 import androidx.core.app.ActivityCompat;
+import androidx.core.graphics.drawable.IconCompat;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.json.JSONException;
 import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -28,12 +34,22 @@ public class HelloScreen extends Screen {
     private static final String VOICEVOX_URL = "https://api.tts.quest/v3/voicevox";
     private static final int SPEAKER_ID = 1; // ずんだもん
     private static final String WEATHER_API_KEY = "f710028e87868b49b1551ecc205f6978";
-    
+    private static final long CACHE_DURATION_MS = 5 * 60 * 1000; // 天気・音声データのキャッシュ有効期間(5分)
+
+    // 天気データ・音声データはアプリ再起動をまたいで使えるようstaticでキャッシュする
+    private static String cachedWeatherText = null;
+    private static int cachedWeatherIcon = R.drawable.ic_weather_clear;
+    private static long cachedWeatherTime = 0;
+    private static final Map<String, byte[]> audioCache = new ConcurrentHashMap<>();
+    private static final Map<String, Long> audioCacheTime = new ConcurrentHashMap<>();
+
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final OkHttpClient httpClient = new OkHttpClient();
     private final FusedLocationProviderClient fusedLocationClient;
 
     private String weatherText = null;
+    private int weatherIconRes = R.drawable.ic_weather_clear;
+    private int parsedIconRes = R.drawable.ic_weather_clear;
     private boolean weatherRequested = false;
 
     public HelloScreen(@NonNull CarContext carContext) {
@@ -41,40 +57,91 @@ public class HelloScreen extends Screen {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(carContext);
     }
 
-    private void speakText(String text) {
+    // 音声データの準備が完了してから画面に天気情報を表示する
+    private void announce(String text, int iconRes) {
         executorService.execute(() -> {
+            byte[] audioData = null;
             try {
-                JSONObject jsonResponse = requestSynthesis(text);
-                if (jsonResponse != null) {
-                    String audioStatusUrl = jsonResponse.optString("audioStatusUrl", null);
-                    String downloadUrl = jsonResponse.optString("mp3DownloadUrl", null);
-                    
-                    if (audioStatusUrl != null) {
-                        boolean isReady = waitForAudioReady(audioStatusUrl);
-                        if (isReady && downloadUrl != null) {
-                            byte[] audioData = downloadAudio(downloadUrl);
-                            playAudio(audioData);
-                        }
+                audioData = getCachedAudio(text);
+                if (audioData == null) {
+                    audioData = synthesizeAudio(text);
+                    if (audioData != null) {
+                        putCachedAudio(text, audioData);
                     }
                 }
             } catch (Exception e) {
                 Log.e("HelloScreen", "Error in VOICEVOX API", e);
             }
+            // 音声データの作成が終わったので画面に天気情報を表示する
+            presentWeather(text, iconRes);
+            if (audioData != null) {
+                playAudio(audioData);
+            }
         });
     }
 
-    private void updateWeather(String text) {
+    private byte[] synthesizeAudio(String text) throws IOException, JSONException, InterruptedException {
+        JSONObject jsonResponse = requestSynthesis(text);
+        if (jsonResponse == null) {
+            return null;
+        }
+        String audioStatusUrl = jsonResponse.optString("audioStatusUrl", null);
+        String downloadUrl = jsonResponse.optString("mp3DownloadUrl", null);
+        if (audioStatusUrl == null || downloadUrl == null) {
+            return null;
+        }
+        if (!waitForAudioReady(audioStatusUrl)) {
+            return null;
+        }
+        return downloadAudio(downloadUrl);
+    }
+
+    private void presentWeather(String text, int iconRes) {
         getCarContext().getMainExecutor().execute(() -> {
             weatherText = text;
+            weatherIconRes = iconRes;
             invalidate();
         });
-        speakText(text);
+    }
+
+    private static byte[] getCachedAudio(String text) {
+        Long time = audioCacheTime.get(text);
+        if (time != null && System.currentTimeMillis() - time < CACHE_DURATION_MS) {
+            return audioCache.get(text);
+        }
+        audioCache.remove(text);
+        audioCacheTime.remove(text);
+        return null;
+    }
+
+    private static void putCachedAudio(String text, byte[] data) {
+        audioCache.put(text, data);
+        audioCacheTime.put(text, System.currentTimeMillis());
+    }
+
+    private static synchronized boolean isWeatherCacheValid() {
+        return cachedWeatherText != null && System.currentTimeMillis() - cachedWeatherTime < CACHE_DURATION_MS;
+    }
+
+    private static synchronized void cacheWeather(String text, int iconRes) {
+        cachedWeatherText = text;
+        cachedWeatherIcon = iconRes;
+        cachedWeatherTime = System.currentTimeMillis();
+    }
+
+    private void updateWeather(String text) {
+        announce(text, R.drawable.ic_weather_clear);
     }
 
     private void speakWeather() {
         executorService.execute(() -> {
             try {
-                getCurrentLocationAndSpeakWeather();
+                if (isWeatherCacheValid()) {
+                    Log.d("HelloScreen", "Using cached weather");
+                    announce(cachedWeatherText, cachedWeatherIcon);
+                } else {
+                    getCurrentLocationAndSpeakWeather();
+                }
             } catch (Exception e) {
                 Log.e("HelloScreen", "Error in weather", e);
             }
@@ -89,7 +156,8 @@ public class HelloScreen extends Screen {
             return;
         }
 
-        fusedLocationClient.getLastLocation()
+        // その都度現在地を新しく測位する（getLastLocationだと古いキャッシュ位置が返るため）
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, new CancellationTokenSource().getToken())
             .addOnSuccessListener(location -> {
                 if (location != null) {
                     double lat = location.getLatitude();
@@ -122,7 +190,8 @@ public class HelloScreen extends Screen {
                         String responseBody = response.body().string();
                         Log.d("HelloScreen", "Weather API response: " + responseBody);
                         String parsedWeather = parseWeatherResponse(responseBody);
-                        updateWeather(parsedWeather);
+                        cacheWeather(parsedWeather, parsedIconRes);
+                        announce(parsedWeather, parsedIconRes);
                     } else {
                         Log.e("HelloScreen", "Weather API failed: " + response.code());
                         updateWeather(getMockWeather());
@@ -139,6 +208,7 @@ public class HelloScreen extends Screen {
         JSONObject response = new JSONObject(json);
         JSONObject weather = response.getJSONArray("weather").getJSONObject(0);
         String description = weather.getString("description");
+        parsedIconRes = iconForWeatherId(weather.optInt("id", 800));
         JSONObject main = response.getJSONObject("main");
         double temp = main.getDouble("temp");
         double feelsLike = main.getDouble("feels_like");
@@ -147,6 +217,16 @@ public class HelloScreen extends Screen {
         String cityName = response.optString("name", "現在の地点");
         
         return cityName + "の天気は" + description + "なのだ。気温は" + (int)temp + "度、体感温度は" + (int)feelsLike + "度なのだ。湿度は" + humidity + "パーセントなのだ";
+    }
+
+    private int iconForWeatherId(int id) {
+        if (id >= 200 && id < 300) return R.drawable.ic_weather_thunder;
+        if (id >= 300 && id < 600) return R.drawable.ic_weather_rain;
+        if (id >= 600 && id < 700) return R.drawable.ic_weather_snow;
+        if (id >= 700 && id < 800) return R.drawable.ic_weather_mist;
+        if (id == 800) return R.drawable.ic_weather_clear;
+        if (id > 800) return R.drawable.ic_weather_clouds;
+        return R.drawable.ic_weather_clear;
     }
 
     private String getMockWeather() {
@@ -274,11 +354,15 @@ public class HelloScreen extends Screen {
             speakWeather();
         }
 
-        String message = (weatherText != null) ? weatherText : "天気を取得中なのだ...";
+        String message = (weatherText != null) ? weatherText : "天気を準備中なのだ...";
+
+        CarIcon weatherIcon = new CarIcon.Builder(
+                IconCompat.createWithResource(getCarContext(), weatherIconRes)).build();
 
         return new MessageTemplate.Builder(message)
                 .setTitle("ずんだもん天気予報")
                 .setHeaderAction(Action.APP_ICON)
+                .setIcon(weatherIcon)
                 .build();
     }
 }
