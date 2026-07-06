@@ -16,6 +16,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.graphics.drawable.IconCompat;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.Priority;
+import com.google.android.gms.tasks.CancellationTokenSource;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -154,7 +156,8 @@ public class HelloScreen extends Screen {
             return;
         }
 
-        fusedLocationClient.getLastLocation()
+        // その都度現在地を新しく測位する（getLastLocationだと古いキャッシュ位置が返るため）
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, new CancellationTokenSource().getToken())
             .addOnSuccessListener(location -> {
                 if (location != null) {
                     double lat = location.getLatitude();
