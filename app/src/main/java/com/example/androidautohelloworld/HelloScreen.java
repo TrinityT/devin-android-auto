@@ -9,9 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
 import androidx.car.app.Screen;
 import androidx.car.app.model.Action;
-import androidx.car.app.model.ItemList;
-import androidx.car.app.model.ListTemplate;
-import androidx.car.app.model.Row;
+import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.Template;
 import androidx.core.app.ActivityCompat;
 import com.google.android.gms.location.FusedLocationProviderClient;
@@ -22,8 +20,6 @@ import okhttp3.Response;
 import org.json.JSONObject;
 import org.json.JSONException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -37,23 +33,8 @@ public class HelloScreen extends Screen {
     private final OkHttpClient httpClient = new OkHttpClient();
     private final FusedLocationProviderClient fusedLocationClient;
 
-    // メニューアイテム
-    private static final List<MenuItem> MENU_ITEMS = new ArrayList<MenuItem>() {{
-        add(new MenuItem("天気予報", "weather"));
-        add(new MenuItem("おはようございます、ずんだもんなのだ", "greeting"));
-        add(new MenuItem("こんにちは、ずんだもんなのだ", "greeting"));
-        add(new MenuItem("こんばんは、ずんだもんなのだ", "greeting"));
-    }};
-    
-    private static class MenuItem {
-        String title;
-        String type;
-        
-        MenuItem(String title, String type) {
-            this.title = title;
-            this.type = type;
-        }
-    }
+    private String weatherText = null;
+    private boolean weatherRequested = false;
 
     public HelloScreen(@NonNull CarContext carContext) {
         super(carContext);
@@ -82,15 +63,12 @@ public class HelloScreen extends Screen {
         });
     }
 
-    private void handleMenuItem(MenuItem item) {
-        switch (item.type) {
-            case "weather":
-                speakWeather();
-                break;
-            case "greeting":
-                speakText(item.title);
-                break;
-        }
+    private void updateWeather(String text) {
+        getCarContext().getMainExecutor().execute(() -> {
+            weatherText = text;
+            invalidate();
+        });
+        speakText(text);
     }
 
     private void speakWeather() {
@@ -107,7 +85,7 @@ public class HelloScreen extends Screen {
         if (ActivityCompat.checkSelfPermission(getCarContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ActivityCompat.checkSelfPermission(getCarContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e("HelloScreen", "Location permission not granted");
-            speakText("位置情報の許可が必要なのだ");
+            updateWeather("位置情報の許可が必要なのだ");
             return;
         }
 
@@ -120,12 +98,12 @@ public class HelloScreen extends Screen {
                     fetchWeatherAndSpeak(lat, lon);
                 } else {
                     Log.e("HelloScreen", "Location is null");
-                    speakText(getMockWeather());
+                    updateWeather(getMockWeather());
                 }
             })
             .addOnFailureListener(e -> {
                 Log.e("HelloScreen", "Failed to get location", e);
-                speakText(getMockWeather());
+                updateWeather(getMockWeather());
             });
     }
 
@@ -143,16 +121,16 @@ public class HelloScreen extends Screen {
                     if (response.isSuccessful()) {
                         String responseBody = response.body().string();
                         Log.d("HelloScreen", "Weather API response: " + responseBody);
-                        String weatherText = parseWeatherResponse(responseBody);
-                        speakText(weatherText);
+                        String parsedWeather = parseWeatherResponse(responseBody);
+                        updateWeather(parsedWeather);
                     } else {
                         Log.e("HelloScreen", "Weather API failed: " + response.code());
-                        speakText(getMockWeather());
+                        updateWeather(getMockWeather());
                     }
                 }
             } catch (Exception e) {
                 Log.e("HelloScreen", "Error in weather API", e);
-                speakText(getMockWeather());
+                updateWeather(getMockWeather());
             }
         });
     }
@@ -290,32 +268,17 @@ public class HelloScreen extends Screen {
     @NonNull
     @Override
     public Template onGetTemplate() {
-        // アプリ起動時に自動で天気を読み上げ
-        speakWeather();
-        
-        try {
-            ItemList.Builder listBuilder = new ItemList.Builder();
-            
-            for (int i = 0; i < MENU_ITEMS.size(); i++) {
-                final MenuItem item = MENU_ITEMS.get(i);
-                Row row = new Row.Builder()
-                        .setTitle(item.title)
-                        .setOnClickListener(() -> {
-                            Log.d("HelloScreen", "Clicked: " + item.title);
-                            handleMenuItem(item);
-                        })
-                        .build();
-                listBuilder.addItem(row);
-            }
-            
-            return new ListTemplate.Builder()
-                    .setSingleList(listBuilder.build())
-                    .setTitle("音声アシスタント")
-                    .setHeaderAction(Action.BACK)
-                    .build();
-        } catch (Exception e) {
-            Log.e("HelloScreen", "Error in onGetTemplate", e);
-            throw e;
+        // アプリ起動時に一度だけ天気を取得して読み上げる
+        if (!weatherRequested) {
+            weatherRequested = true;
+            speakWeather();
         }
+
+        String message = (weatherText != null) ? weatherText : "天気を取得中なのだ...";
+
+        return new MessageTemplate.Builder(message)
+                .setTitle("ずんだもん天気予報")
+                .setHeaderAction(Action.APP_ICON)
+                .build();
     }
 }
