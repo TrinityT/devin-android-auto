@@ -4,31 +4,49 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- ずんだもんの豆の形 -->
-    <path
-        android:fillColor="#7CB342"
-        android:pathData="M54,20 C35,20 20,35 20,54 C20,73 35,88 54,88 C73,88 88,73 88,54 C88,35 73,20 54,20 Z" />
-    <!-- ずんだもんの顔 -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M40,45 Q54,55 68,45 Q68,65 54,70 Q40,65 40,45 Z" />
-    <!-- 目 -->
-    <circle
-        android:fillColor="#333333"
-        android:cx="45"
-        android:cy="50"
-        android:r="3" />
-    <circle
-        android:fillColor="#333333"
-        android:cx="63"
-        android:cy="50"
-        android:r="3" />
-    <!-- 口 -->
-    <path
-        android:fillColor="#333333"
-        android:pathData="M48,58 Q54,62 60,58" />
-    <!-- 葉っぱ -->
+    <!-- ずんだもんの豆の形（大きめ） -->
     <path
         android:fillColor="#8BC34A"
-        android:pathData="M54,20 Q60,10 70,15 Q65,25 54,20 Z" />
+        android:pathData="M54,15 C30,15 15,30 15,54 C15,78 30,93 54,93 C78,93 93,78 93,54 C93,30 78,15 54,15 Z" />
+    <!-- ずんだもんの顔（白い部分） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M35,42 Q54,58 73,42 Q73,68 54,75 Q35,68 35,42 Z" />
+    <!-- 左目 -->
+    <circle
+        android:fillColor="#333333"
+        android:cx="42"
+        android:cy="48"
+        android:r="4" />
+    <!-- 右目 -->
+    <circle
+        android:fillColor="#333333"
+        android:cx="66"
+        android:cy="48"
+        android:r="4" />
+    <!-- 口（笑顔） -->
+    <path
+        android:fillColor="#333333"
+        android:strokeWidth="2"
+        android:strokeColor="#333333"
+        android:pathData="M45,60 Q54,68 63,60" />
+    <!-- 頬のチーク -->
+    <circle
+        android:fillColor="#FFCDD2"
+        android:cx="38"
+        android:cy="55"
+        android:r="3" />
+    <circle
+        android:fillColor="#FFCDD2"
+        android:cx="70"
+        android:cy="55"
+        android:r="3" />
+    <!-- 葉っぱ（上） -->
+    <path
+        android:fillColor="#9CCC65"
+        android:pathData="M54,15 Q62,5 75,10 Q68,20 54,15 Z" />
+    <!-- 葉っぱ（下） -->
+    <path
+        android:fillColor="#9CCC65"
+        android:pathData="M54,93 Q62,103 75,98 Q68,88 54,93 Z" />
 </vector>
