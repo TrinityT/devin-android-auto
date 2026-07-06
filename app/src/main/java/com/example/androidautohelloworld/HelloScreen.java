@@ -1,38 +1,69 @@
 package com.example.androidautohelloworld;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.location.Location;
 import android.media.MediaPlayer;
 import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
 import androidx.car.app.Screen;
 import androidx.car.app.model.Action;
-import androidx.car.app.model.MessageTemplate;
+import androidx.car.app.model.ItemList;
+import androidx.car.app.model.ListTemplate;
+import androidx.car.app.model.Row;
 import androidx.car.app.model.Template;
+import androidx.core.app.ActivityCompat;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.json.JSONObject;
 import org.json.JSONException;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class HelloScreen extends Screen {
 
     private static final String VOICEVOX_URL = "https://api.tts.quest/v3/voicevox";
-    private static final int SPEAKER_ID = 3;
+    private static final int SPEAKER_ID = 1; // ずんだもん
+    private static final String WEATHER_API_KEY = "f710028e87868b49b1551ecc205f6978";
+    
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
     private final OkHttpClient httpClient = new OkHttpClient();
+    private final FusedLocationProviderClient fusedLocationClient;
+
+    // メニューアイテム
+    private static final List<MenuItem> MENU_ITEMS = new ArrayList<MenuItem>() {{
+        add(new MenuItem("天気予報", "weather"));
+        add(new MenuItem("おはようございます、ずんだもんなのだ", "greeting"));
+        add(new MenuItem("こんにちは、ずんだもんなのだ", "greeting"));
+        add(new MenuItem("こんばんは、ずんだもんなのだ", "greeting"));
+    }};
+    
+    private static class MenuItem {
+        String title;
+        String type;
+        
+        MenuItem(String title, String type) {
+            this.title = title;
+            this.type = type;
+        }
+    }
 
     public HelloScreen(@NonNull CarContext carContext) {
         super(carContext);
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(carContext);
     }
 
-    private void speakHelloWorld() {
+    private void speakText(String text) {
         executorService.execute(() -> {
             try {
-                JSONObject jsonResponse = requestSynthesis("Hello World!");
+                JSONObject jsonResponse = requestSynthesis(text);
                 if (jsonResponse != null) {
                     String audioStatusUrl = jsonResponse.optString("audioStatusUrl", null);
                     String downloadUrl = jsonResponse.optString("mp3DownloadUrl", null);
@@ -49,6 +80,99 @@ public class HelloScreen extends Screen {
                 Log.e("HelloScreen", "Error in VOICEVOX API", e);
             }
         });
+    }
+
+    private void handleMenuItem(MenuItem item) {
+        switch (item.type) {
+            case "weather":
+                speakWeather();
+                break;
+            case "greeting":
+                speakText(item.title);
+                break;
+        }
+    }
+
+    private void speakWeather() {
+        executorService.execute(() -> {
+            try {
+                getCurrentLocationAndSpeakWeather();
+            } catch (Exception e) {
+                Log.e("HelloScreen", "Error in weather", e);
+            }
+        });
+    }
+
+    private void getCurrentLocationAndSpeakWeather() {
+        if (ActivityCompat.checkSelfPermission(getCarContext(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+            ActivityCompat.checkSelfPermission(getCarContext(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e("HelloScreen", "Location permission not granted");
+            speakText("位置情報の許可が必要なのだ");
+            return;
+        }
+
+        fusedLocationClient.getLastLocation()
+            .addOnSuccessListener(location -> {
+                if (location != null) {
+                    double lat = location.getLatitude();
+                    double lon = location.getLongitude();
+                    Log.d("HelloScreen", "Location: " + lat + ", " + lon);
+                    fetchWeatherAndSpeak(lat, lon);
+                } else {
+                    Log.e("HelloScreen", "Location is null");
+                    speakText(getMockWeather());
+                }
+            })
+            .addOnFailureListener(e -> {
+                Log.e("HelloScreen", "Failed to get location", e);
+                speakText(getMockWeather());
+            });
+    }
+
+    private void fetchWeatherAndSpeak(double lat, double lon) {
+        executorService.execute(() -> {
+            try {
+                String url = "https://api.openweathermap.org/data/2.5/weather?lat=" + lat + 
+                             "&lon=" + lon + "&appid=" + WEATHER_API_KEY + 
+                             "&units=metric&lang=ja";
+                Log.d("HelloScreen", "Weather API URL: " + url);
+                
+                Request request = new Request.Builder().url(url).get().build();
+                try (Response response = httpClient.newCall(request).execute()) {
+                    Log.d("HelloScreen", "Weather API response code: " + response.code());
+                    if (response.isSuccessful()) {
+                        String responseBody = response.body().string();
+                        Log.d("HelloScreen", "Weather API response: " + responseBody);
+                        String weatherText = parseWeatherResponse(responseBody);
+                        speakText(weatherText);
+                    } else {
+                        Log.e("HelloScreen", "Weather API failed: " + response.code());
+                        speakText(getMockWeather());
+                    }
+                }
+            } catch (Exception e) {
+                Log.e("HelloScreen", "Error in weather API", e);
+                speakText(getMockWeather());
+            }
+        });
+    }
+
+    private String parseWeatherResponse(String json) throws JSONException {
+        JSONObject response = new JSONObject(json);
+        JSONObject weather = response.getJSONArray("weather").getJSONObject(0);
+        String description = weather.getString("description");
+        JSONObject main = response.getJSONObject("main");
+        double temp = main.getDouble("temp");
+        double feelsLike = main.getDouble("feels_like");
+        int humidity = main.getInt("humidity");
+        
+        String cityName = response.optString("name", "現在の地点");
+        
+        return cityName + "の天気は" + description + "なのだ。気温は" + (int)temp + "度、体感温度は" + (int)feelsLike + "度なのだ。湿度は" + humidity + "パーセントなのだ";
+    }
+
+    private String getMockWeather() {
+        return "天気情報の取得に失敗したのだ。現在の地点の天気は晴れなのだ。気温は23度なのだ";
     }
 
     private JSONObject requestSynthesis(String text) throws IOException, JSONException {
@@ -166,10 +290,27 @@ public class HelloScreen extends Screen {
     @NonNull
     @Override
     public Template onGetTemplate() {
-        speakHelloWorld();
+        // アプリ起動時に自動で天気を読み上げ
+        speakWeather();
+        
         try {
-            return new MessageTemplate.Builder("Welcome to Android Auto!")
-                    .setTitle("Hello World!")
+            ItemList.Builder listBuilder = new ItemList.Builder();
+            
+            for (int i = 0; i < MENU_ITEMS.size(); i++) {
+                final MenuItem item = MENU_ITEMS.get(i);
+                Row row = new Row.Builder()
+                        .setTitle(item.title)
+                        .setOnClickListener(() -> {
+                            Log.d("HelloScreen", "Clicked: " + item.title);
+                            handleMenuItem(item);
+                        })
+                        .build();
+                listBuilder.addItem(row);
+            }
+            
+            return new ListTemplate.Builder()
+                    .setSingleList(listBuilder.build())
+                    .setTitle("音声アシスタント")
                     .setHeaderAction(Action.BACK)
                     .build();
         } catch (Exception e) {
