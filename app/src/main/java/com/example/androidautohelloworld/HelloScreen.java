@@ -9,9 +9,11 @@ import androidx.annotation.NonNull;
 import androidx.car.app.CarContext;
 import androidx.car.app.Screen;
 import androidx.car.app.model.Action;
+import androidx.car.app.model.CarIcon;
 import androidx.car.app.model.MessageTemplate;
 import androidx.car.app.model.Template;
 import androidx.core.app.ActivityCompat;
+import androidx.core.graphics.drawable.IconCompat;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import okhttp3.OkHttpClient;
@@ -34,6 +36,8 @@ public class HelloScreen extends Screen {
     private final FusedLocationProviderClient fusedLocationClient;
 
     private String weatherText = null;
+    private int weatherIconRes = R.drawable.ic_weather_clear;
+    private int parsedIconRes = R.drawable.ic_weather_clear;
     private boolean weatherRequested = false;
 
     public HelloScreen(@NonNull CarContext carContext) {
@@ -64,8 +68,13 @@ public class HelloScreen extends Screen {
     }
 
     private void updateWeather(String text) {
+        updateWeather(text, R.drawable.ic_weather_clear);
+    }
+
+    private void updateWeather(String text, int iconRes) {
         getCarContext().getMainExecutor().execute(() -> {
             weatherText = text;
+            weatherIconRes = iconRes;
             invalidate();
         });
         speakText(text);
@@ -122,7 +131,7 @@ public class HelloScreen extends Screen {
                         String responseBody = response.body().string();
                         Log.d("HelloScreen", "Weather API response: " + responseBody);
                         String parsedWeather = parseWeatherResponse(responseBody);
-                        updateWeather(parsedWeather);
+                        updateWeather(parsedWeather, parsedIconRes);
                     } else {
                         Log.e("HelloScreen", "Weather API failed: " + response.code());
                         updateWeather(getMockWeather());
@@ -139,6 +148,7 @@ public class HelloScreen extends Screen {
         JSONObject response = new JSONObject(json);
         JSONObject weather = response.getJSONArray("weather").getJSONObject(0);
         String description = weather.getString("description");
+        parsedIconRes = iconForWeatherId(weather.optInt("id", 800));
         JSONObject main = response.getJSONObject("main");
         double temp = main.getDouble("temp");
         double feelsLike = main.getDouble("feels_like");
@@ -147,6 +157,16 @@ public class HelloScreen extends Screen {
         String cityName = response.optString("name", "現在の地点");
         
         return cityName + "の天気は" + description + "なのだ。気温は" + (int)temp + "度、体感温度は" + (int)feelsLike + "度なのだ。湿度は" + humidity + "パーセントなのだ";
+    }
+
+    private int iconForWeatherId(int id) {
+        if (id >= 200 && id < 300) return R.drawable.ic_weather_thunder;
+        if (id >= 300 && id < 600) return R.drawable.ic_weather_rain;
+        if (id >= 600 && id < 700) return R.drawable.ic_weather_snow;
+        if (id >= 700 && id < 800) return R.drawable.ic_weather_mist;
+        if (id == 800) return R.drawable.ic_weather_clear;
+        if (id > 800) return R.drawable.ic_weather_clouds;
+        return R.drawable.ic_weather_clear;
     }
 
     private String getMockWeather() {
@@ -276,9 +296,13 @@ public class HelloScreen extends Screen {
 
         String message = (weatherText != null) ? weatherText : "天気を取得中なのだ...";
 
+        CarIcon weatherIcon = new CarIcon.Builder(
+                IconCompat.createWithResource(getCarContext(), weatherIconRes)).build();
+
         return new MessageTemplate.Builder(message)
                 .setTitle("ずんだもん天気予報")
                 .setHeaderAction(Action.APP_ICON)
+                .setIcon(weatherIcon)
                 .build();
     }
 }
